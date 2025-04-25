@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: flink-cdc-job
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: download-connector
+        image: curlimages/curl
+        command:
+        - sh
+        - -c
+        - |
+          curl -L -o /connector-jars/flink-sql-connector-mysql-cdc-2.3.0.jar https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.3.0/flink-sql-connector-mysql-cdc-2.3.0.jar
+        volumeMounts:
+        - name: connector-volume
+          mountPath: /connector-jars
+      containers:
+      - name: flink-job-submitter
+        image: flink:1.17
+        command: ["sh", "-c"]
+        args:
+        - |
+          apt update && apt install -y python3 python3-pip &&           ln -s /usr/bin/python3 /usr/bin/python &&           export PYFLINK_PYTHON=/usr/bin/python &&           echo "✅ Environment ready, running Flink job..." &&           cp /connector-jars/flink-sql-connector-mysql-cdc-2.3.0.jar /opt/flink/lib/ &&           ls /opt/flink/lib &&           # Run the Flink job with explicit JobManager address
+          /opt/flink/bin/flink run -py /opt/job/flink-cdc-job.py -m flink-jobmanager:8081
+        volumeMounts:
+        - name: job-script
+          mountPath: /opt/job
+        - name: connector-volume
+          mountPath: /connector-jars
+      volumes:
+      - name: job-script
+        configMap:
+          name: flink-cdc-script
+      - name: connector-volume
+        emptyDir: {}
+      restartPolicy: Never
+  backoffLimit: 2
